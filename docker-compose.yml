@@ -1,0 +1,33 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: prf-suprimentos-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: prf_suprimentos
+      POSTGRES_USER: prf
+      POSTGRES_PASSWORD: prf
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+
+  backend:
+    image: node:22-alpine
+    container_name: prf-suprimentos-api
+    working_dir: /app
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://prf:prf@db:5432/prf_suprimentos
+      PORT: 3000
+    volumes:
+      - ./backend:/app
+    command: sh -c "npm install && npm start"
+    ports:
+      - "3000:3000"
+    depends_on:
+      - db
+
+volumes:
+  postgres_data:
