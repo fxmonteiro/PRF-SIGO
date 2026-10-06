@@ -37,6 +37,39 @@ await pool.query(sql);
 await pool.query(`INSERT INTO materiais(codigo,nome,categoria,unidade_medida,estoque_minimo,estoque_maximo) SELECT 'MAT-'||LPAD(e.id::text,4,'0'),e.insumo,'Catálogo inicial',e.unidade_medida,e.estoque_minimo,e.estoque_maximo FROM estoques e WHERE NOT EXISTS(SELECT 1 FROM materiais m WHERE LOWER(m.nome)=LOWER(e.insumo))`);
 await pool.query(`UPDATE estoques e SET material_id=m.id FROM materiais m WHERE e.material_id IS NULL AND LOWER(m.nome)=LOWER(e.insumo)`);
 await pool.query(`UPDATE solicitacoes s SET material_id=m.id FROM materiais m WHERE s.material_id IS NULL AND LOWER(m.nome)=LOWER(s.insumo)`);
+await pool.query(`INSERT INTO fornecedores(nome,documento,contato,email,telefone) SELECT * FROM (VALUES
+('Alimentos Brasil Distribuidora','12.345.678/0001-90','Mariana Costa','comercial@alimentosbrasil.local','(82) 3333-1200'),
+('Combustível Nordeste S/A','23.456.789/0001-11','Rafael Lima','vendas@combustivelnordeste.local','(82) 3333-2400'),
+('Suprimentos Maceió Ltda.','34.567.890/0001-22','Juliana Alves','atendimento@suprimentosmaceio.local','(82) 3333-3500'),
+('Higieniza Serviços','45.678.901/0001-33','Carlos Mendes','comercial@higieniza.local','(82) 3333-4600')
+) AS v(nome,documento,contato,email,telefone) WHERE NOT EXISTS (SELECT 1 FROM fornecedores f WHERE LOWER(f.nome)=LOWER(v.nome))`);
+await pool.query(`INSERT INTO materiais(codigo,nome,categoria,unidade_medida,estoque_minimo,estoque_maximo) VALUES
+('MAT-0101','Toner para impressora','Informática','un',5,20),
+('MAT-0102','Papel higiênico institucional','Higiene','pct',30,120),
+('MAT-0103','Luva nitrílica','EPI','cx',20,80),
+('MAT-0104','Água mineral 20L','Apoio operacional','un',15,50)
+ON CONFLICT (codigo) DO NOTHING`);
+await pool.query(`INSERT INTO estoques(insumo,unidade_medida,quantidade_atual,estoque_minimo,estoque_maximo,material_id) SELECT m.nome,m.unidade_medida,CASE m.codigo WHEN 'MAT-0101' THEN 8 WHEN 'MAT-0102' THEN 72 WHEN 'MAT-0103' THEN 18 WHEN 'MAT-0104' THEN 26 END,m.estoque_minimo,m.estoque_maximo,m.id FROM materiais m WHERE m.codigo IN ('MAT-0101','MAT-0102','MAT-0103','MAT-0104') AND NOT EXISTS (SELECT 1 FROM estoques e WHERE e.material_id=m.id)`);
+await pool.query(`INSERT INTO solicitacoes(numero,solicitante,unidade,tipo,prioridade,insumo,material_id,quantidade,prazo,justificativa,status)
+SELECT * FROM (VALUES
+('SOL-000001','Emanuel Monteiro','Superintendência Regional - AL','Material de expediente','ALTA','Papel A4',(SELECT id FROM materiais WHERE LOWER(nome)=LOWER('Papel A4')),40,'2026-10-09','Reposição para impressão de documentos operacionais e administrativos.','EM_ANDAMENTO'),
+('SOL-000002','Ana Beatriz Santos','Delegacia de Maceió','EPI','URGENTE','Luva nitrílica',(SELECT id FROM materiais WHERE LOWER(nome)=LOWER('Luva nitrílica')),25,'2026-10-07','Reposição de EPI para equipes em atividade externa.','EM_ANALISE'),
+('SOL-000003','Lucas Ferreira','Unidade Operacional Arapiraca','Higiene','NORMAL','Papel higiênico institucional',(SELECT id FROM materiais WHERE LOWER(nome)=LOWER('Papel higiênico institucional')),40,'2026-10-15','Reposição mensal do almoxarifado da unidade.','CONCLUIDA'),
+('SOL-000004','Marcos Oliveira','Delegacia de União dos Palmares','Apoio operacional','NORMAL','Água mineral 20L',(SELECT id FROM materiais WHERE LOWER(nome)=LOWER('Água mineral 20L')),20,'2026-10-12','Abastecimento da unidade para atendimento e equipes de plantão.','EM_ANALISE'),
+('SOL-000005','Carla Mendes','Superintendência Regional - AL','Informática','ALTA','Toner para impressora',(SELECT id FROM materiais WHERE LOWER(nome)=LOWER('Toner para impressora')),6,'2026-10-11','Reposição para impressão de relatórios e expedientes.','REJEITADA')
+) AS v(numero,solicitante,unidade,tipo,prioridade,insumo,material_id,quantidade,prazo,justificativa,status) WHERE NOT EXISTS (SELECT 1 FROM solicitacoes s WHERE s.numero=v.numero)`);
+await pool.query(`INSERT INTO historico_processos(solicitacao_id,acao,status_anterior,status_novo,observacao) SELECT s.id,'Solicitação criada',NULL,s.status,'Registro inicial de demonstração do SIGO' FROM solicitacoes s WHERE s.numero IN ('SOL-000001','SOL-000002','SOL-000003','SOL-000004','SOL-000005') AND NOT EXISTS (SELECT 1 FROM historico_processos h WHERE h.solicitacao_id=s.id)`);
+await pool.query(`INSERT INTO compras(solicitacao_id,fornecedor_id,numero,valor,previsao_entrega,status,observacao) SELECT s.id,f.id,'COMP-00001',18450.00,'2026-10-10','EM_ANDAMENTO','Compra relacionada à reposição de materiais de expediente.' FROM solicitacoes s,fornecedores f WHERE s.numero='SOL-000001' AND f.nome='Suprimentos Maceió Ltda.' AND NOT EXISTS (SELECT 1 FROM compras c WHERE c.numero='COMP-00001')`);
+await pool.query(`INSERT INTO compras(solicitacao_id,fornecedor_id,numero,valor,previsao_entrega,status,observacao) SELECT s.id,f.id,'COMP-00002',32700.00,'2026-10-08','APROVADA','Aquisição de EPI para equipes operacionais.' FROM solicitacoes s,fornecedores f WHERE s.numero='SOL-000002' AND f.nome='Higieniza Serviços' AND NOT EXISTS (SELECT 1 FROM compras c WHERE c.numero='COMP-00002')`);
+await pool.query(`INSERT INTO pagamentos(nota_fiscal,fornecedor,valor,vencimento,status) SELECT * FROM (VALUES
+('NF-2026-1845','Suprimentos Maceió Ltda.',18450.00,'2026-10-10','PENDENTE'),
+('NF-2026-1762','Alimentos Brasil Distribuidora',12600.00,'2026-10-06','PENDENTE'),
+('NF-2026-1651','Combustível Nordeste S/A',45800.00,'2026-10-02','PAGO'),
+('NF-2026-1519','Higieniza Serviços',9800.00,'2026-09-28','PAGO')
+) AS v(nota_fiscal,fornecedor,valor,vencimento,status) WHERE NOT EXISTS (SELECT 1 FROM pagamentos p WHERE p.nota_fiscal=v.nota_fiscal)`);
+await pool.query(`INSERT INTO movimentacoes_estoque(estoque_id,material_id,tipo,quantidade,saldo_anterior,saldo_novo,observacao,usuario_id) SELECT e.id,e.material_id,'ENTRADA',30,42,72,'Recebimento de reposição mensal',u.id FROM estoques e JOIN materiais m ON m.id=e.material_id CROSS JOIN usuarios u WHERE m.nome='Papel higiênico institucional' AND u.email='admin@prf.local' AND NOT EXISTS (SELECT 1 FROM movimentacoes_estoque mv WHERE mv.observacao='Recebimento de reposição mensal')`);
+await pool.query(`INSERT INTO movimentacoes_estoque(estoque_id,material_id,tipo,quantidade,saldo_anterior,saldo_novo,observacao,usuario_id) SELECT e.id,e.material_id,'SAIDA',7,25,18,'Distribuição para equipe operacional',u.id FROM estoques e JOIN materiais m ON m.id=e.material_id CROSS JOIN usuarios u WHERE m.nome='Luva nitrílica' AND u.email='admin@prf.local' AND NOT EXISTS (SELECT 1 FROM movimentacoes_estoque mv WHERE mv.observacao='Distribuição para equipe operacional')`);
+await pool.query(`INSERT INTO movimentacoes_estoque(estoque_id,material_id,tipo,quantidade,saldo_anterior,saldo_novo,observacao,usuario_id) SELECT e.id,e.material_id,'AJUSTE',8,0,8,'Saldo inicial conferido no inventário',u.id FROM estoques e JOIN materiais m ON m.id=e.material_id CROSS JOIN usuarios u WHERE m.nome='Toner para impressora' AND u.email='admin@prf.local' AND NOT EXISTS (SELECT 1 FROM movimentacoes_estoque mv WHERE mv.observacao='Saldo inicial conferido no inventário')`);
 }
 app.get("/api/health", asyncRoute(async (_req,res)=>{await pool.query("SELECT 1");
 res.json({ok:true,database:"connected",environment:process.env.NODE_ENV||"development"});
@@ -59,13 +92,10 @@ res.json(r.rows.map(normalize));
 }));
 app.post("/api/materiais", asyncRoute(async (req,res)=>{const {codigo,nome,categoria,unidade_medida='un',estoque_minimo=0,estoque_maximo}=req.body;
 if(!nome)return res.status(400).json({message:"Nome do material é obrigatório."});
-const client=await pool.connect();
-try{await client.query('BEGIN');
+const client=await pool.connect();try{await client.query('BEGIN');
 const r=await client.query(`INSERT INTO materiais(codigo,nome,categoria,unidade_medida,estoque_minimo,estoque_maximo) VALUES($1,$2,$3,$4,$5,$6) RETURNING *`,[codigo||null,nome,categoria||null,unidade_medida,estoque_minimo,estoque_maximo||null]);
 await client.query(`INSERT INTO estoques(insumo,unidade_medida,quantidade_atual,estoque_minimo,estoque_maximo,material_id) VALUES($1,$2,0,$3,$4,$5)`,[nome,unidade_medida,estoque_minimo,estoque_maximo||null,r.rows[0].id]);
-await client.query('COMMIT');
-res.status(201).json(normalize(r.rows[0]));
-}catch(e){await client.query('ROLLBACK');throw e}finally{client.release()}
+await client.query('COMMIT');res.status(201).json(normalize(r.rows[0]));}catch(e){await client.query('ROLLBACK');throw e}finally{client.release()}
 }));
 app.get("/api/solicitacoes", asyncRoute(async (_req,res)=>{const r=await pool.query(`SELECT s.*,m.nome AS material_nome,m.codigo AS material_codigo FROM solicitacoes s LEFT JOIN materiais m ON m.id=s.material_id ORDER BY s.criado_em DESC`);
 res.json(r.rows.map(normalize));
@@ -180,14 +210,11 @@ res.json(normalize(r.rows[0]));
 app.get("/api/contratos", asyncRoute(async (_req,res)=>{const r=await pool.query(`SELECT c.*,f.nome fornecedor_nome FROM contratos c LEFT JOIN fornecedores f ON f.id=c.fornecedor_id ORDER BY c.data_fim`);
 res.json(r.rows);
 }));
-app.post("/api/contratos", asyncRoute(async (req,res)=>{let {numero,fornecedor,fornecedor_id,objeto,data_inicio,data_fim,valor=0,status='EM_VIGENCIA'}=req.body;
-if(!numero||!objeto||!data_inicio||!data_fim)return res.status(400).json({message:'Preencha os campos obrigatórios.'});
-if(fornecedor_id){const f=await pool.query('SELECT nome FROM fornecedores WHERE id=$1 AND ativo=true',[fornecedor_id]);
-if(!f.rowCount)return res.status(400).json({message:'Fornecedor não encontrado.'});
-fornecedor=f.rows[0].nome;}
-if(!fornecedor)return res.status(400).json({message:'Fornecedor é obrigatório.'});
-if(new Date(data_fim)<new Date(data_inicio))return res.status(400).json({message:'A data de fim não pode ser anterior à data de início.'});
-const r=await pool.query(`INSERT INTO contratos(numero,fornecedor,fornecedor_id,objeto,data_inicio,data_fim,valor,status) VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,[numero,fornecedor,fornecedor_id||null,objeto,data_inicio,data_fim,valor,status]);
+app.post("/api/contratos", asyncRoute(async (req,res)=>{const {numero,fornecedor,fornecedor_id,objeto,data_inicio,data_fim,valor=0,status='EM_VIGENCIA'}=req.body;
+if(!numero||!objeto||!data_inicio||!data_fim||!fornecedor_id)return res.status(400).json({message:'Preencha os campos obrigatórios.'});
+if(new Date(data_fim)<new Date(data_inicio))return res.status(400).json({message:'A data final não pode ser anterior à data inicial.'});
+const f=await pool.query('SELECT nome FROM fornecedores WHERE id=$1 AND ativo=true',[fornecedor_id]);if(!f.rowCount)return res.status(400).json({message:'Fornecedor não encontrado.'});
+const r=await pool.query(`INSERT INTO contratos(numero,fornecedor,fornecedor_id,objeto,data_inicio,data_fim,valor,status) VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,[numero,f.rows[0].nome,fornecedor_id,objeto,data_inicio,data_fim,valor,status]);
 res.status(201).json(r.rows[0]);
 }));
 app.get("/api/pagamentos", asyncRoute(async (_req,res)=>{const r=await pool.query("SELECT * FROM pagamentos ORDER BY vencimento");
@@ -197,6 +224,8 @@ app.patch("/api/pagamentos/:id/pago", asyncRoute(async (req,res)=>{const r=await
 if(!r.rowCount)return res.status(404).json({message:'Pagamento não encontrado.'});
 res.json(normalize(r.rows[0]));
 }));
+app.post("/api/usuarios", asyncRoute(async (req,res)=>{const {nome,email,perfil='SOLICITANTE',ativo=true}=req.body;if(!nome)return res.status(400).json({message:'Nome é obrigatório.'});if(!['ADMIN','GESTOR','SOLICITANTE'].includes(perfil))return res.status(400).json({message:'Perfil inválido.'});try{const r=await pool.query(`INSERT INTO usuarios(nome,email,perfil,ativo) VALUES($1,$2,$3,$4) RETURNING id,nome,email,perfil,ativo,criado_em`,[nome,email||null,perfil,ativo]);res.status(201).json(r.rows[0])}catch(e){if(e.code==='23505')return res.status(409).json({message:'E-mail já cadastrado.'});throw e}}));
+app.patch("/api/usuarios/:id", asyncRoute(async (req,res)=>{const {nome,email,perfil,ativo}=req.body;if(!nome||!['ADMIN','GESTOR','SOLICITANTE'].includes(perfil))return res.status(400).json({message:'Nome e perfil válidos são obrigatórios.'});try{const r=await pool.query(`UPDATE usuarios SET nome=$1,email=$2,perfil=$3,ativo=$4 WHERE id=$5 RETURNING id,nome,email,perfil,ativo,criado_em`,[nome,email||null,perfil,ativo!==false,req.params.id]);if(!r.rowCount)return res.status(404).json({message:'Usuário não encontrado.'});res.json(r.rows[0])}catch(e){if(e.code==='23505')return res.status(409).json({message:'E-mail já cadastrado.'});throw e}}));
 app.get("/api/relatorios/resumo", asyncRoute(async (_req,res)=>{const [s,e,c,p,b]=await Promise.all([pool.query("SELECT status,COUNT(*)::int total FROM solicitacoes GROUP BY status"),pool.query("SELECT COUNT(*)::int total,COUNT(*) FILTER(WHERE quantidade_atual<=estoque_minimo)::int criticos FROM estoques"),pool.query("SELECT COUNT(*)::int total,COUNT(*) FILTER(WHERE data_fim BETWEEN CURRENT_DATE AND CURRENT_DATE+INTERVAL '30 days')::int vencendo FROM contratos"),pool.query("SELECT COUNT(*)::int total,COALESCE(SUM(valor),0) valor FROM pagamentos WHERE status='PENDENTE'"),pool.query("SELECT COUNT(*)::int total FROM compras WHERE status NOT IN ('RECEBIDA','CANCELADA')")]);
 res.json({solicitacoes:s.rows,estoque:e.rows[0],contratos:c.rows[0],pagamentos:p.rows[0],compras:b.rows[0]});
 }));
