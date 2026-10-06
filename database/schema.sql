@@ -88,7 +88,7 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO contratos (numero,fornecedor,objeto,data_inicio,data_fim,valor,status) VALUES
 ('CT-003/2024','Alimentos Ltda.','Fornecimento de alimentos','2026-01-01','2026-10-05',150000,'EM_VIGENCIA'),
-('CT-007/2024','Combustível S/A','Fornecimento de combustível','2026-01-01','2026-10-12',420000,'EM_VIGENCIA')
+('CT-007/2024','Combustível S/A','Fornecimento de combustível','2026-01-01',DATE '2026-10-12',420000,'EM_VIGENCIA')
 ON CONFLICT (numero) DO NOTHING;
 
 INSERT INTO alertas (titulo,descricao,tipo) VALUES
@@ -205,11 +205,11 @@ FROM materiais m WHERE m.codigo IN ('MAT-0101','MAT-0102','MAT-0103','MAT-0104')
 
 INSERT INTO solicitacoes(numero,solicitante,unidade,tipo,prioridade,insumo,material_id,quantidade,prazo,justificativa,status)
 SELECT * FROM (VALUES
-('SOL-000001','Emanuel Monteiro','Superintendência Regional - AL','Material de expediente','ALTA','Papel A4',(SELECT id FROM materiais WHERE LOWER(nome)=LOWER('Papel A4')),40,'2026-10-09','Reposição para impressão de documentos operacionais e administrativos.','EM_ANDAMENTO'),
-('SOL-000002','Ana Beatriz Santos','Delegacia de Maceió','EPI','URGENTE','Luva nitrílica',(SELECT id FROM materiais WHERE LOWER(nome)=LOWER('Luva nitrílica')),25,'2026-10-07','Reposição de EPI para equipes em atividade externa.','EM_ANALISE'),
-('SOL-000003','Lucas Ferreira','Unidade Operacional Arapiraca','Higiene','NORMAL','Papel higiênico institucional',(SELECT id FROM materiais WHERE LOWER(nome)=LOWER('Papel higiênico institucional')),40,'2026-10-15','Reposição mensal do almoxarifado da unidade.','CONCLUIDA'),
-('SOL-000004','Marcos Oliveira','Delegacia de União dos Palmares','Apoio operacional','NORMAL','Água mineral 20L',(SELECT id FROM materiais WHERE LOWER(nome)=LOWER('Água mineral 20L')),20,'2026-10-12','Abastecimento da unidade para atendimento e equipes de plantão.','EM_ANALISE'),
-('SOL-000005','Carla Mendes','Superintendência Regional - AL','Informática','ALTA','Toner para impressora',(SELECT id FROM materiais WHERE LOWER(nome)=LOWER('Toner para impressora')),6,'2026-10-11','Reposição para impressão de relatórios e expedientes.','REJEITADA')
+('SOL-000001','Emanuel Monteiro','Superintendência Regional - AL','Material de expediente','ALTA','Papel A4',(SELECT id FROM materiais WHERE LOWER(nome)=LOWER('Papel A4')),40,DATE '2026-10-09','Reposição para impressão de documentos operacionais e administrativos.','EM_ANDAMENTO'),
+('SOL-000002','Ana Beatriz Santos','Delegacia de Maceió','EPI','URGENTE','Luva nitrílica',(SELECT id FROM materiais WHERE LOWER(nome)=LOWER('Luva nitrílica')),25,DATE '2026-10-07','Reposição de EPI para equipes em atividade externa.','EM_ANALISE'),
+('SOL-000003','Lucas Ferreira','Unidade Operacional Arapiraca','Higiene','NORMAL','Papel higiênico institucional',(SELECT id FROM materiais WHERE LOWER(nome)=LOWER('Papel higiênico institucional')),40,DATE '2026-10-15','Reposição mensal do almoxarifado da unidade.','CONCLUIDA'),
+('SOL-000004','Marcos Oliveira','Delegacia de União dos Palmares','Apoio operacional','NORMAL','Água mineral 20L',(SELECT id FROM materiais WHERE LOWER(nome)=LOWER('Água mineral 20L')),20,DATE '2026-10-12','Abastecimento da unidade para atendimento e equipes de plantão.','EM_ANALISE'),
+('SOL-000005','Carla Mendes','Superintendência Regional - AL','Informática','ALTA','Toner para impressora',(SELECT id FROM materiais WHERE LOWER(nome)=LOWER('Toner para impressora')),6,DATE '2026-10-11','Reposição para impressão de relatórios e expedientes.','REJEITADA')
 ) AS v(numero,solicitante,unidade,tipo,prioridade,insumo,material_id,quantidade,prazo,justificativa,status)
 WHERE NOT EXISTS (SELECT 1 FROM solicitacoes s WHERE s.numero=v.numero);
 
@@ -218,15 +218,15 @@ SELECT s.id,'Solicitação criada',NULL,s.status,'Registro inicial de demonstra�
 WHERE s.numero IN ('SOL-000001','SOL-000002','SOL-000003','SOL-000004','SOL-000005') AND NOT EXISTS (SELECT 1 FROM historico_processos h WHERE h.solicitacao_id=s.id);
 
 INSERT INTO compras(solicitacao_id,fornecedor_id,numero,valor,previsao_entrega,status,observacao)
-SELECT s.id,f.id,'COMP-00001',18450.00,'2026-10-10','EM_ANDAMENTO','Compra relacionada à reposição de materiais de expediente.' FROM solicitacoes s,fornecedores f WHERE s.numero='SOL-000001' AND f.nome='Suprimentos Maceió Ltda.' AND NOT EXISTS (SELECT 1 FROM compras c WHERE c.numero='COMP-00001');
+SELECT s.id,f.id,'COMP-00001',18450.00,DATE '2026-10-10','EM_ANDAMENTO','Compra relacionada à reposição de materiais de expediente.' FROM solicitacoes s,fornecedores f WHERE s.numero='SOL-000001' AND f.nome='Suprimentos Maceió Ltda.' AND NOT EXISTS (SELECT 1 FROM compras c WHERE c.numero='COMP-00001');
 INSERT INTO compras(solicitacao_id,fornecedor_id,numero,valor,previsao_entrega,status,observacao)
 SELECT s.id,f.id,'COMP-00002',32700.00,'2026-10-08','APROVADA','Aquisição de EPI para equipes operacionais.' FROM solicitacoes s,fornecedores f WHERE s.numero='SOL-000002' AND f.nome='Higieniza Serviços' AND NOT EXISTS (SELECT 1 FROM compras c WHERE c.numero='COMP-00002');
 
 INSERT INTO pagamentos(nota_fiscal,fornecedor,valor,vencimento,status) SELECT * FROM (VALUES
-('NF-2026-1845','Suprimentos Maceió Ltda.',18450.00,'2026-10-10','PENDENTE'),
-('NF-2026-1762','Alimentos Brasil Distribuidora',12600.00,'2026-10-06','PENDENTE'),
-('NF-2026-1651','Combustível Nordeste S/A',45800.00,'2026-10-02','PAGO'),
-('NF-2026-1519','Higieniza Serviços',9800.00,'2026-09-28','PAGO')
+('NF-2026-1845','Suprimentos Maceió Ltda.',18450.00,DATE '2026-10-10','PENDENTE'),
+('NF-2026-1762','Alimentos Brasil Distribuidora',12600.00,DATE '2026-10-06','PENDENTE'),
+('NF-2026-1651','Combustível Nordeste S/A',45800.00,DATE '2026-10-02','PAGO'),
+('NF-2026-1519','Higieniza Serviços',9800.00,DATE '2026-09-28','PAGO')
 ) AS v(nota_fiscal,fornecedor,valor,vencimento,status) WHERE NOT EXISTS (SELECT 1 FROM pagamentos p WHERE p.nota_fiscal=v.nota_fiscal);
 
 INSERT INTO movimentacoes_estoque(estoque_id,material_id,tipo,quantidade,saldo_anterior,saldo_novo,observacao,usuario_id)
