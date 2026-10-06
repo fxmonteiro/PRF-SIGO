@@ -53,10 +53,26 @@ document.querySelector("#statusFilter").onchange=filterRows;
 bindGlobal();
 }
 function closeModal(){document.querySelector("#modal")?.style&& (document.querySelector("#modal").style.display="none")}
-function filterRows(){const q=(document.querySelector("#filter")?.value||"").toLowerCase(),st=document.querySelector("#statusFilter")?.value||"";
-document.querySelectorAll("#requestRows tr").forEach(r=>{const text=r.textContent.toLowerCase();
-r.style.display=(!q||text.includes(q))&&(!st||text.includes((st||"").replace("_"," ").toLowerCase()))?"":"none";
-});
+function filterRows(){
+  const normalize = value =>
+    String(value ?? "")
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "");
+
+  const q = normalize(document.querySelector("#filter")?.value || "");
+  const st = normalize(document.querySelector("#statusFilter")?.value || "")
+    .replace(/_/g, " ");
+
+  document.querySelectorAll("#requestRows tr").forEach(r => {
+    const text = normalize(r.textContent);
+
+    r.style.display =
+      (!q || text.includes(q)) &&
+      (!st || text.includes(st))
+        ? ""
+        : "none";
+  });
 }
 async function createRequest(e){e.preventDefault();
 const data=Object.fromEntries(new FormData(e.target).entries());
