@@ -69,9 +69,17 @@ app.get("/api/dashboard", async (_req,res)=>{
   }catch(e){console.error(e);res.status(500).json({message:"Erro ao carregar dashboard"});}
 });
 
+app.get("/api/materiais", async (_req,res)=>{
+  try{
+    const r=await pool.query(`SELECT id, insumo AS nome, unidade_medida, quantidade_atual, estoque_minimo
+                              FROM estoques ORDER BY insumo ASC`);
+    res.json(r.rows);
+  }catch(e){console.error(e);res.status(500).json({message:"Erro ao listar insumos"});}
+});
+
 app.get("/api/solicitacoes", async (_req,res)=>{
   try{
-    const r=await pool.query(`SELECT id,numero,solicitante,unidade,tipo,prioridade,prazo,status
+    const r=await pool.query(`SELECT id,numero,solicitante,unidade,tipo,prioridade,insumo,insumo AS insumo_nome,quantidade,prazo,status
                               FROM solicitacoes ORDER BY criado_em DESC`);
     res.json(r.rows.map(normalize));
   }catch(e){console.error(e);res.status(500).json({message:"Erro ao listar solicitações"});}
@@ -84,7 +92,7 @@ app.get("/api/solicitacoes/:id", async (req,res)=>{
     const h=await pool.query(`SELECT h.*,u.nome AS usuario FROM historico_processos h
                               LEFT JOIN usuarios u ON u.id=h.usuario_id
                               WHERE h.solicitacao_id=$1 ORDER BY h.data ASC`,[req.params.id]);
-    const x=normalize(r.rows[0]);x.historico=h.rows;res.json(x);
+    const x=normalize(r.rows[0]);x.insumo_nome=x.insumo||x.insumo_nome||"Não informado";x.historico=h.rows;res.json(x);
   }catch(e){console.error(e);res.status(500).json({message:"Erro ao consultar solicitação"});}
 });
 
