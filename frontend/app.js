@@ -44,6 +44,10 @@ async function api(path, options={}){
   return r.json();
 }
 
+function escapeHtml(value){
+  return String(value??"").replace(/[&<>'"]/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[ch]));
+}
+
 function statusBadge(status){
   const map={EM_ANALISE:["Em análise","blue"],EM_ANDAMENTO:["Em andamento","blue"],CONCLUIDA:["Concluída","green"],ATRASADA:["Atrasada","red"],PENDENTE:["Pendente","yellow"],REJEITADA:["Rejeitada","red"]};
   const x=map[status]||[status,"blue"]; return `<span class="badge ${x[1]}">${x[0]}</span>`;
@@ -76,7 +80,7 @@ async function dashboard(){
     <div class="grid">
       <div class="card panel"><div class="panel-head"><h3>Últimas solicitações</h3><a href="#/solicitacoes">Ver todas →</a></div>
         <div class="table-wrap"><table><thead><tr><th>Número</th><th>Solicitante</th><th>Tipo</th><th>Prazo</th><th>Status</th></tr></thead><tbody>
-        ${(d.ultimas||[]).map(x=>`<tr><td>${x.numero}</td><td>${x.solicitante}</td><td>${x.tipo}</td><td>${x.prazo||"—"}</td><td>${statusBadge(x.status)}</td></tr>`).join("") || `<tr><td colspan="5" class="empty">Nenhuma solicitação cadastrada.</td></tr>`}
+        ${(d.ultimas||[]).map(x=>`<tr><td data-label="Número">${escapeHtml(x.numero||"—")}</td><td data-label="Solicitante">${escapeHtml(x.solicitante||"—")}</td><td data-label="Tipo">${escapeHtml(x.tipo||"—")}</td><td data-label="Prazo">${escapeHtml(x.prazo||"—")}</td><td data-label="Status">${statusBadge(x.status)}</td></tr>`).join("") || `<tr><td colspan="5" class="empty">Nenhuma solicitação cadastrada.</td></tr>`}
         </tbody></table></div>
       </div>
       <div class="card panel"><div class="panel-head"><h3>Indicadores rápidos</h3></div>
@@ -92,7 +96,10 @@ async function dashboard(){
 function kpi(label,value,sub,cls=""){return `<div class="card kpi"><label>${label}</label><b>${value??0}</b><span class="trend ${cls}">${sub}</span></div>`}
 
 async function solicitacoes(){
-  let rows=[];try{rows=await api("/solicitacoes")}catch(e){}
+  let rows=[];let materiais=[];
+  try{rows=await api("/solicitacoes")}catch(e){}
+  try{materiais=await api("/materiais")}catch(e){}
+  const materialOptions=materiais.map(m=>`<option value="${escapeHtml(m.nome||m.insumo||m.material_nome||"")}" data-material-id="${m.id||""}">${escapeHtml(m.nome||m.insumo||m.material_nome||"Insumo sem nome")} · ${escapeHtml(m.unidade_medida||"un")}</option>`).join("");
   const content=`<section class="content">
     <div class="page-head"><div><h1>Solicitações</h1><p style="font-size:10px;color:var(--muted)">Crie, acompanhe e encaminhe solicitações de suprimentos.</p></div><button class="btn btn-yellow" id="newRequest">+ Nova solicitação</button></div>
     <div class="card panel">
@@ -108,7 +115,7 @@ async function solicitacoes(){
       <div class="field"><label>Unidade *</label><input name="unidade" required placeholder="Unidade / delegacia"></div>
       <div class="field"><label>Tipo *</label><select name="tipo" required><option value="Reposição de estoque">Reposição de estoque</option><option value="Aquisição">Aquisição</option><option value="Serviço">Serviço</option><option value="Manutenção">Manutenção</option></select></div>
       <div class="field"><label>Prioridade</label><select name="prioridade"><option>NORMAL</option><option>ALTA</option><option>URGENTE</option></select></div>
-      <div class="field"><label>Insumo *</label><input name="insumo" required placeholder="Ex.: Papel A4"></div>
+      <div class="field"><label>Insumo *</label><select name="insumo" required><option value="">Selecione um insumo</option>${materialOptions}</select></div>
       <div class="field"><label>Quantidade *</label><input name="quantidade" type="number" min="1" required></div>
       <div class="field"><label>Prazo desejado</label><input name="prazo" type="date"></div>
       <div class="field full"><label>Justificativa *</label><textarea name="justificativa" required placeholder="Descreva a necessidade..."></textarea></div>
@@ -123,7 +130,10 @@ async function solicitacoes(){
   bindGlobal();
 }
 function closeModal(){document.querySelector("#modal").style.display="none"}
-function requestRow(x){return `<tr><td><a href="#/solicitacoes/${x.id}" style="color:var(--blue)">${x.numero}</a></td><td>${x.solicitante}</td><td>${x.unidade}</td><td>${x.tipo}</td><td>${x.prioridade}</td><td>${x.prazo||"—"}</td><td>${statusBadge(x.status)}</td></tr>`}
+function requestRow(x){
+  const insumo=x.insumo||x.insumo_nome||x.material_nome||x.material?.nome||"Não informado";
+  return `<tr><td data-label="Número"><a href="#/solicitacoes/${x.id}" style="color:var(--blue)">${escapeHtml(x.numero||"—")}</a></td><td data-label="Solicitante">${escapeHtml(x.solicitante||"—")}</td><td data-label="Unidade">${escapeHtml(x.unidade||"—")}</td><td data-label="Tipo">${escapeHtml(x.tipo||"—")}</td><td data-label="Prioridade">${escapeHtml(x.prioridade||"—")}</td><td data-label="Prazo">${escapeHtml(x.prazo||"—")}</td><td data-label="Status">${statusBadge(x.status)}</td></tr>`
+}
 function filterRows(){
   const q=document.querySelector("#filter").value.toLowerCase(), st=document.querySelector("#statusFilter").value;
   document.querySelectorAll("#requestRows tr").forEach(r=>{const text=r.textContent.toLowerCase();r.style.display=(!q||text.includes(q))&&(!st||text.includes(st.replace("_"," ")))?"":"none"});
@@ -138,7 +148,7 @@ async function detalhe(id){
   const content=`<section class="content">
   <div class="page-head"><div><h1>${x.numero}</h1><p style="font-size:10px;color:var(--muted)">${x.tipo} · ${x.unidade}</p></div><button class="btn btn-light" onclick="history.back()">← Voltar</button></div>
   <div class="grid"><div class="card panel"><div class="panel-head"><h3>Dados da solicitação</h3>${statusBadge(x.status)}</div>
-  <div class="form-grid"><div class="field"><label>Solicitante</label><input value="${x.solicitante}" disabled></div><div class="field"><label>Responsável atual</label><input value="${x.responsavel||"Ainda não atribuído"}" disabled></div><div class="field"><label>Insumo</label><input value="${x.insumo}" disabled></div><div class="field"><label>Quantidade</label><input value="${x.quantidade}" disabled></div><div class="field"><label>Prioridade</label><input value="${x.prioridade}" disabled></div><div class="field"><label>Prazo</label><input value="${x.prazo||"—"}" disabled></div><div class="field full"><label>Justificativa</label><textarea disabled>${x.justificativa}</textarea></div></div></div>
+  <div class="form-grid"><div class="field"><label>Solicitante</label><input value="${x.solicitante}" disabled></div><div class="field"><label>Responsável atual</label><input value="${x.responsavel||"Ainda não atribuído"}" disabled></div><div class="field"><label>Insumo</label><input value="${escapeHtml(x.insumo||x.insumo_nome||x.material_nome||x.material?.nome||"Não informado")}" disabled></div><div class="field"><label>Quantidade</label><input value="${x.quantidade}" disabled></div><div class="field"><label>Prioridade</label><input value="${x.prioridade}" disabled></div><div class="field"><label>Prazo</label><input value="${x.prazo||"—"}" disabled></div><div class="field full"><label>Justificativa</label><textarea disabled>${x.justificativa}</textarea></div></div></div>
   <div class="card panel"><h3 style="font-size:14px">Histórico</h3><div class="timeline">${(x.historico||[]).map(h=>`<div class="event"><b>${h.acao}</b><small>${h.usuario||"Sistema"} · ${new Date(h.data).toLocaleString("pt-BR")}</small><small>${h.observacao||""}</small></div>`).join("")}</div></div></div>
   </section>`;
   app.innerHTML=layout(content,"solicitacoes");bindGlobal();
