@@ -96,3 +96,87 @@ INSERT INTO alertas (titulo,descricao,tipo) VALUES
 ('Contrato de manutenção próximo do vencimento','Verifique os contratos nos próximos 5 dias','ATENCAO'),
 ('Acompanhe os pagamentos pendentes','Existem documentos aguardando processamento','ATENCAO')
 ON CONFLICT DO NOTHING;
+
+-- Extensões do SIGO: todas são criadas de forma segura para bancos já existentes.
+CREATE TABLE IF NOT EXISTS materiais (
+  id SERIAL PRIMARY KEY,
+  codigo VARCHAR(60) UNIQUE,
+  nome VARCHAR(160) NOT NULL,
+  categoria VARCHAR(100),
+  unidade_medida VARCHAR(30) NOT NULL DEFAULT 'un',
+  estoque_minimo NUMERIC(14,2) NOT NULL DEFAULT 0,
+  estoque_maximo NUMERIC(14,2),
+  ativo BOOLEAN NOT NULL DEFAULT TRUE,
+  criado_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  atualizado_em TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS fornecedores (
+  id SERIAL PRIMARY KEY,
+  nome VARCHAR(180) NOT NULL,
+  documento VARCHAR(40),
+  contato VARCHAR(160),
+  email VARCHAR(180),
+  telefone VARCHAR(50),
+  ativo BOOLEAN NOT NULL DEFAULT TRUE,
+  criado_em TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS movimentacoes_estoque (
+  id SERIAL PRIMARY KEY,
+  estoque_id INTEGER REFERENCES estoques(id) ON DELETE CASCADE,
+  material_id INTEGER REFERENCES materiais(id) ON DELETE SET NULL,
+  tipo VARCHAR(20) NOT NULL,
+  quantidade NUMERIC(14,2) NOT NULL,
+  saldo_anterior NUMERIC(14,2) NOT NULL DEFAULT 0,
+  saldo_novo NUMERIC(14,2) NOT NULL DEFAULT 0,
+  observacao TEXT,
+  usuario_id INTEGER REFERENCES usuarios(id),
+  criado_em TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS compras (
+  id SERIAL PRIMARY KEY,
+  solicitacao_id INTEGER REFERENCES solicitacoes(id) ON DELETE SET NULL,
+  fornecedor_id INTEGER REFERENCES fornecedores(id) ON DELETE SET NULL,
+  numero VARCHAR(50) UNIQUE NOT NULL,
+  valor NUMERIC(14,2) NOT NULL DEFAULT 0,
+  previsao_entrega DATE,
+  status VARCHAR(30) NOT NULL DEFAULT 'EM_COTACAO',
+  observacao TEXT,
+  criado_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  atualizado_em TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS cotacoes (
+  id SERIAL PRIMARY KEY,
+  solicitacao_id INTEGER REFERENCES solicitacoes(id) ON DELETE SET NULL,
+  fornecedor_id INTEGER REFERENCES fornecedores(id) ON DELETE SET NULL,
+  valor NUMERIC(14,2) NOT NULL DEFAULT 0,
+  prazo_entrega INTEGER,
+  status VARCHAR(30) NOT NULL DEFAULT 'RECEBIDA',
+  criado_em TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS unidades (
+  id SERIAL PRIMARY KEY,
+  nome VARCHAR(160) UNIQUE NOT NULL,
+  sigla VARCHAR(30),
+  ativo BOOLEAN NOT NULL DEFAULT TRUE
+);
+
+ALTER TABLE solicitacoes ADD COLUMN IF NOT EXISTS material_id INTEGER REFERENCES materiais(id) ON DELETE SET NULL;
+ALTER TABLE estoques ADD COLUMN IF NOT EXISTS material_id INTEGER REFERENCES materiais(id) ON DELETE SET NULL;
+ALTER TABLE contratos ADD COLUMN IF NOT EXISTS fornecedor_id INTEGER REFERENCES fornecedores(id) ON DELETE SET NULL;
+
+INSERT INTO materiais (codigo,nome,categoria,unidade_medida,estoque_minimo,estoque_maximo)
+SELECT 'MAT-'||LPAD(id::text,4,'0'), insumo, 'Catálogo inicial', unidade_medida, estoque_minimo, estoque_maximo
+FROM estoques e
+WHERE NOT EXISTS (SELECT 1 FROM materiais m WHERE LOWER(m.nome)=LOWER(e.insumo));
+
+UPDATE estoques e SET material_id=m.id
+FROM materiais m WHERE e.material_id IS NULL AND LOWER(m.nome)=LOWER(e.insumo);
+
+UPDATE solicitacoes s SET material_id=m.id
+FROM materiais m WHERE s.material_id IS NULL AND LOWER(m.nome)=LOWER(s.insumo);
+
