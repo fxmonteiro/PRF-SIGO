@@ -180,3 +180,61 @@ FROM materiais m WHERE e.material_id IS NULL AND LOWER(m.nome)=LOWER(e.insumo);
 UPDATE solicitacoes s SET material_id=m.id
 FROM materiais m WHERE s.material_id IS NULL AND LOWER(m.nome)=LOWER(s.insumo);
 
+
+
+-- Dados demonstrativos do SIGO: inseridos de forma idempotente para manter dados já existentes.
+INSERT INTO fornecedores(nome,documento,contato,email,telefone)
+SELECT * FROM (VALUES
+('Alimentos Brasil Distribuidora','12.345.678/0001-90','Mariana Costa','comercial@alimentosbrasil.local','(82) 3333-1200'),
+('Combustível Nordeste S/A','23.456.789/0001-11','Rafael Lima','vendas@combustivelnordeste.local','(82) 3333-2400'),
+('Suprimentos Maceió Ltda.','34.567.890/0001-22','Juliana Alves','atendimento@suprimentosmaceio.local','(82) 3333-3500'),
+('Higieniza Serviços','45.678.901/0001-33','Carlos Mendes','comercial@higieniza.local','(82) 3333-4600')
+) AS v(nome,documento,contato,email,telefone)
+WHERE NOT EXISTS (SELECT 1 FROM fornecedores f WHERE LOWER(f.nome)=LOWER(v.nome));
+
+INSERT INTO materiais(codigo,nome,categoria,unidade_medida,estoque_minimo,estoque_maximo) VALUES
+('MAT-0101','Toner para impressora','Informática','un',5,20),
+('MAT-0102','Papel higiênico institucional','Higiene','pct',30,120),
+('MAT-0103','Luva nitrílica','EPI','cx',20,80),
+('MAT-0104','Água mineral 20L','Apoio operacional','un',15,50)
+ON CONFLICT (codigo) DO NOTHING;
+
+INSERT INTO estoques(insumo,unidade_medida,quantidade_atual,estoque_minimo,estoque_maximo,material_id)
+SELECT m.nome,m.unidade_medida,CASE m.codigo WHEN 'MAT-0101' THEN 8 WHEN 'MAT-0102' THEN 72 WHEN 'MAT-0103' THEN 18 WHEN 'MAT-0104' THEN 26 END,m.estoque_minimo,m.estoque_maximo,m.id
+FROM materiais m WHERE m.codigo IN ('MAT-0101','MAT-0102','MAT-0103','MAT-0104') AND NOT EXISTS (SELECT 1 FROM estoques e WHERE e.material_id=m.id);
+
+INSERT INTO solicitacoes(numero,solicitante,unidade,tipo,prioridade,insumo,material_id,quantidade,prazo,justificativa,status)
+SELECT * FROM (VALUES
+('SOL-000001','Emanuel Monteiro','Superintendência Regional - AL','Material de expediente','ALTA','Papel A4',(SELECT id FROM materiais WHERE LOWER(nome)=LOWER('Papel A4')),40,'2026-10-09','Reposição para impressão de documentos operacionais e administrativos.','EM_ANDAMENTO'),
+('SOL-000002','Ana Beatriz Santos','Delegacia de Maceió','EPI','URGENTE','Luva nitrílica',(SELECT id FROM materiais WHERE LOWER(nome)=LOWER('Luva nitrílica')),25,'2026-10-07','Reposição de EPI para equipes em atividade externa.','EM_ANALISE'),
+('SOL-000003','Lucas Ferreira','Unidade Operacional Arapiraca','Higiene','NORMAL','Papel higiênico institucional',(SELECT id FROM materiais WHERE LOWER(nome)=LOWER('Papel higiênico institucional')),40,'2026-10-15','Reposição mensal do almoxarifado da unidade.','CONCLUIDA'),
+('SOL-000004','Marcos Oliveira','Delegacia de União dos Palmares','Apoio operacional','NORMAL','Água mineral 20L',(SELECT id FROM materiais WHERE LOWER(nome)=LOWER('Água mineral 20L')),20,'2026-10-12','Abastecimento da unidade para atendimento e equipes de plantão.','EM_ANALISE'),
+('SOL-000005','Carla Mendes','Superintendência Regional - AL','Informática','ALTA','Toner para impressora',(SELECT id FROM materiais WHERE LOWER(nome)=LOWER('Toner para impressora')),6,'2026-10-11','Reposição para impressão de relatórios e expedientes.','REJEITADA')
+) AS v(numero,solicitante,unidade,tipo,prioridade,insumo,material_id,quantidade,prazo,justificativa,status)
+WHERE NOT EXISTS (SELECT 1 FROM solicitacoes s WHERE s.numero=v.numero);
+
+INSERT INTO historico_processos(solicitacao_id,acao,status_anterior,status_novo,observacao)
+SELECT s.id,'Solicitação criada',NULL,s.status,'Registro inicial de demonstração do SIGO' FROM solicitacoes s
+WHERE s.numero IN ('SOL-000001','SOL-000002','SOL-000003','SOL-000004','SOL-000005') AND NOT EXISTS (SELECT 1 FROM historico_processos h WHERE h.solicitacao_id=s.id);
+
+INSERT INTO compras(solicitacao_id,fornecedor_id,numero,valor,previsao_entrega,status,observacao)
+SELECT s.id,f.id,'COMP-00001',18450.00,'2026-10-10','EM_ANDAMENTO','Compra relacionada à reposição de materiais de expediente.' FROM solicitacoes s,fornecedores f WHERE s.numero='SOL-000001' AND f.nome='Suprimentos Maceió Ltda.' AND NOT EXISTS (SELECT 1 FROM compras c WHERE c.numero='COMP-00001');
+INSERT INTO compras(solicitacao_id,fornecedor_id,numero,valor,previsao_entrega,status,observacao)
+SELECT s.id,f.id,'COMP-00002',32700.00,'2026-10-08','APROVADA','Aquisição de EPI para equipes operacionais.' FROM solicitacoes s,fornecedores f WHERE s.numero='SOL-000002' AND f.nome='Higieniza Serviços' AND NOT EXISTS (SELECT 1 FROM compras c WHERE c.numero='COMP-00002');
+
+INSERT INTO pagamentos(nota_fiscal,fornecedor,valor,vencimento,status) SELECT * FROM (VALUES
+('NF-2026-1845','Suprimentos Maceió Ltda.',18450.00,'2026-10-10','PENDENTE'),
+('NF-2026-1762','Alimentos Brasil Distribuidora',12600.00,'2026-10-06','PENDENTE'),
+('NF-2026-1651','Combustível Nordeste S/A',45800.00,'2026-10-02','PAGO'),
+('NF-2026-1519','Higieniza Serviços',9800.00,'2026-09-28','PAGO')
+) AS v(nota_fiscal,fornecedor,valor,vencimento,status) WHERE NOT EXISTS (SELECT 1 FROM pagamentos p WHERE p.nota_fiscal=v.nota_fiscal);
+
+INSERT INTO movimentacoes_estoque(estoque_id,material_id,tipo,quantidade,saldo_anterior,saldo_novo,observacao,usuario_id)
+SELECT e.id,e.material_id,'ENTRADA',30,42,72,'Recebimento de reposição mensal',u.id FROM estoques e JOIN materiais m ON m.id=e.material_id CROSS JOIN usuarios u
+WHERE m.nome='Papel higiênico institucional' AND u.email='admin@prf.local' AND NOT EXISTS (SELECT 1 FROM movimentacoes_estoque mv WHERE mv.observacao='Recebimento de reposição mensal');
+INSERT INTO movimentacoes_estoque(estoque_id,material_id,tipo,quantidade,saldo_anterior,saldo_novo,observacao,usuario_id)
+SELECT e.id,e.material_id,'SAIDA',7,25,18,'Distribuição para equipe operacional',u.id FROM estoques e JOIN materiais m ON m.id=e.material_id CROSS JOIN usuarios u
+WHERE m.nome='Luva nitrílica' AND u.email='admin@prf.local' AND NOT EXISTS (SELECT 1 FROM movimentacoes_estoque mv WHERE mv.observacao='Distribuição para equipe operacional');
+INSERT INTO movimentacoes_estoque(estoque_id,material_id,tipo,quantidade,saldo_anterior,saldo_novo,observacao,usuario_id)
+SELECT e.id,e.material_id,'AJUSTE',8,0,8,'Saldo inicial conferido no inventário',u.id FROM estoques e JOIN materiais m ON m.id=e.material_id CROSS JOIN usuarios u
+WHERE m.nome='Toner para impressora' AND u.email='admin@prf.local' AND NOT EXISTS (SELECT 1 FROM movimentacoes_estoque mv WHERE mv.observacao='Saldo inicial conferido no inventário');
