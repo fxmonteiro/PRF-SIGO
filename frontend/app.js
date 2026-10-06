@@ -156,10 +156,13 @@ document.querySelector('#newContract').onclick=contractModal;
 bindGlobal();
 }
 async function contractModal(){let fornecedores=[];
-try{fornecedores=await api('/fornecedores')}catch(e){}const m=modalShell('contractModal','Novo contrato',`<form id="contractForm"><div class="form-grid"><div class="field"><label>Número *</label><input name="numero" required></div><div class="field"><label>Fornecedor *</label><input name="fornecedor" required></div><div class="field full"><label>Objeto *</label><textarea name="objeto" required></textarea></div><div class="field"><label>Início *</label><input name="data_inicio" type="date" required></div><div class="field"><label>Fim *</label><input name="data_fim" type="date" required></div><div class="field"><label>Valor</label><input name="valor" type="number" min="0" step="0.01"></div></div><div class="modal-actions"><button type="button" class="btn btn-light cancel">Cancelar</button><button class="btn btn-primary">Cadastrar</button></div></form>`);
+try{fornecedores=await api('/fornecedores')}catch(e){}const m=modalShell('contractModal','Novo contrato',`<form id="contractForm"><div class="form-grid"><div class="field"><label>Número *</label><input name="numero" required></div><div class="field"><label>Fornecedor *</label><select name="fornecedor_id" id="contractSupplier" required><option value="">Selecione o fornecedor</option>${fornecedores.map(f=>`<option value="${f.id}">${esc(f.nome)}</option>`).join("")}</select></div><div class="field full"><label>Objeto *</label><textarea name="objeto" required></textarea></div><div class="field"><label>Início *</label><input name="data_inicio" type="date" required></div><div class="field"><label>Fim *</label><input name="data_fim" type="date" required></div><div class="field"><label>Valor</label><input name="valor" type="number" min="0" step="0.01"></div></div><div class="modal-actions"><button type="button" class="btn btn-light cancel">Cancelar</button><button class="btn btn-primary">Cadastrar</button></div></form>`);
 m.querySelector('.cancel').onclick=()=>m.style.display='none';
 m.querySelector('form').onsubmit=async e=>{e.preventDefault();
 const data=Object.fromEntries(new FormData(e.target));
+const supplier=fornecedores.find(f=>String(f.id)===String(data.fornecedor_id));
+if(!supplier){toast('Selecione um fornecedor.');return}
+data.fornecedor=supplier.nome;
 try{await api('/contratos',{method:'POST',body:JSON.stringify(data)});
 m.style.display='none';
 toast('Contrato cadastrado.');
@@ -196,7 +199,7 @@ bindGlobal();
 }
 async function fornecedoresPage(){let rows=[];
 try{rows=await api('/fornecedores')}catch(e){}const content=`<section class="content"><div class="page-head"><div><h1>Fornecedores</h1><p>Cadastro e contatos dos fornecedores.</p></div><button class="btn btn-yellow" id="newSupplier">+ Novo fornecedor</button></div><div class="card panel"><div class="table-wrap"><table><thead><tr><th>Nome</th><th>Documento</th><th>Contato</th><th>E-mail</th><th>Telefone</th></tr></thead><tbody>${rows.map(x=>`<tr><td data-label="Nome">${esc(x.nome)}</td><td data-label="Documento">${esc(x.documento||'—')}</td><td data-label="Contato">${esc(x.contato||'—')}</td><td data-label="E-mail">${esc(x.email||'—')}</td><td data-label="Telefone">${esc(x.telefone||'—')}</td></tr>`).join('')||'<tr><td colspan="5" class="empty">Nenhum fornecedor cadastrado.</td></tr>'}</tbody></table></div></div></section><div class="modal-backdrop" id="supplierModal"></div>`;
-app.innerHTML=layout(content,'contratos');
+app.innerHTML=layout(content,'fornecedores');
 document.querySelector('#newSupplier').onclick=()=>{const m=modalShell('supplierModal','Novo fornecedor',`<form id="supplierForm"><div class="form-grid"><div class="field full"><label>Nome *</label><input name="nome" required></div><div class="field"><label>Documento</label><input name="documento"></div><div class="field"><label>Contato</label><input name="contato"></div><div class="field"><label>E-mail</label><input name="email" type="email"></div><div class="field"><label>Telefone</label><input name="telefone"></div></div><div class="modal-actions"><button type="button" class="btn btn-light cancel">Cancelar</button><button class="btn btn-primary">Cadastrar</button></div></form>`);
 m.querySelector('.cancel').onclick=()=>m.style.display='none';
 m.querySelector('form').onsubmit=async e=>{e.preventDefault();
@@ -217,6 +220,8 @@ async function router(){const p=location.hash.replace(/^#\/?/,'').split('/');
 if(p[0]==='solicitacoes'&&p[1])return detalhe(p[1]);
 if(p[0]==='solicitacoes')return solicitacoes();
 if(p[0]==='estoques')return estoques();
+if(p[0]==='compras')return comprasPage();
+if(p[0]==='fornecedores')return fornecedoresPage();
 if(p[0]==='contratos')return contratos();
 if(p[0]==='pagamentos')return pagamentos();
 if(p[0]==='rastreabilidade')return rastreabilidade();
